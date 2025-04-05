@@ -7,20 +7,22 @@ import gdown
 import os
 
 # Mapping of location to Google Drive model file IDs
-MODEL_LINKS = {
-    "Patiala": "https://drive.google.com/file/d/19hbgk6afotZ6rt_LV9y8qK7Jiw3kWRbQ/view?usp=drive_link",  # mixed_noaug.keras
-    "Thapar Campus": "https://drive.google.com/file/d/1HIwQqPoZShblcuG4Sc2kJ5qoi4w18ZTS/view?usp=drive_link"  # pix2pix.keras
-}
+import gdown
 
-# Function to download model if not already present
+
 def download_model(location):
-    file_id = MODEL_LINKS[location]
-    filename = "mixed_noaug.keras" if location == "Patiala" else "pix2pix.keras"
-    if not os.path.exists(filename):
-        url = f"https://drive.google.com/uc?id={file_id}"
-        st.write(f"Downloading model for {location}...")
-        gdown.download(url, filename, quiet=False)
+    if location == "Patiala":
+        url = "https://drive.google.com/uc?id=19hbgk6afotZ6rt_LV9y8qK7Jiw3kWRbQ"
+        filename = "mixed_noaug.keras"
+    elif location == "Thapar Campus":
+        url = "https://drive.google.com/uc?id=1HIwQqPoZShblcuG4Sc2kJ5qoi4w18ZTS"
+        filename = "pix2pix.keras"
+    else:
+        return None
+
+    gdown.download(url, filename, quiet=False)
     return filename
+
 
 # Preprocessing function
 def preprocess_image(image):
