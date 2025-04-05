@@ -7,7 +7,9 @@ import tensorflow as tf
 import gdown
 import os
 
-# Model loader
+# ----------------------
+# Load the ML Model
+# ----------------------
 @st.cache_resource
 def load_model(location):
     if location == "Patiala":
@@ -23,19 +25,24 @@ def load_model(location):
 
     return tf.keras.models.load_model(filename)
 
-# Frame preprocessing
+
+# ----------------------
+# Frame Pre/Postprocessing
+# ----------------------
 def preprocess_frame(frame):
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     frame = cv2.resize(frame, (256, 256))
     frame = frame.astype(np.float32) / 127.5 - 1
     return np.expand_dims(frame, axis=0)
 
-# Postprocessing
 def postprocess_frame(output):
     frame = (output[0] + 1) * 127.5
     return np.clip(frame, 0, 255).astype(np.uint8)
 
-# WebRTC VideoProcessor
+
+# ----------------------
+# Video Processor
+# ----------------------
 class VideoProcessor(VideoProcessorBase):
     def __init__(self):
         self.model = None
@@ -55,27 +62,25 @@ class VideoProcessor(VideoProcessorBase):
             return av.VideoFrame.from_ndarray(output_frame, format="bgr24")
         return frame
 
-# UI
+
+# ----------------------
+# Streamlit UI
+# ----------------------
 st.title("📷 Real-Time Dehazing (WebRTC-enabled)")
 
-# Select mode
 mode = st.radio("Choose input method:", ["Webcam", "Upload Image", "Upload Video"])
-
-# Select location
 location = st.selectbox("Select location:", ["Patiala", "Thapar Campus"])
 
-# Load model once based on location
 model = load_model(location)
 
-# Store model in session state
+# Initialize processor in session state if not already there
 if "processor" not in st.session_state:
     st.session_state.processor = VideoProcessor()
-    st.session_state.processor.update_model(model)
-
-# Update model every time user selects location
 st.session_state.processor.update_model(model)
 
-# Safe to call webrtc_streamer now
+# ----------------------
+# Handle Modes
+# ----------------------
 if mode == "Webcam":
     st.info("Make sure to allow webcam access.")
     webrtc_streamer(
