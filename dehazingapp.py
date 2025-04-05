@@ -69,22 +69,43 @@ model = load_model(location)
 
 # Store model in session state
 # Ensure model and processor are initialized
-if "model" not in st.session_state:
-    st.session_state.model = model
-
+# Only create processor if not already in session state
 if "processor" not in st.session_state:
-    processor = VideoProcessor()
-    processor.update_model(st.session_state.model)
-    st.session_state.processor = processor
+    class VideoProcessor:
+        def __init__(self):
+            self.model = None
 
-# Webcam mode
+        def update_model(self, model):
+            self.model = model
+
+        def recv(self, frame):
+            import av
+            import cv2
+            import numpy as np
+            img = frame.to_ndarray(format="bgr24")
+            img_resized = cv2.resize(img, (256, 256))
+            img_normalized = (img_resized / 127.5) - 1.0
+            img_input = np.expand_dims(img_normalized, axis=0)
+
+            output = self.model.predict(img_input)[0]
+            output = ((output + 1) * 127.5).astype(np.uint8)
+            output = cv2.resize(output, (img.shape[1], img.shape[0]))
+            return av.VideoFrame.from_ndarray(output, format="bgr24")
+
+    st.session_state.processor = VideoProcessor()
+
+# Update model every time user selects location
+st.session_state.processor.update_model(model)
+
+# Safe to call webrtc_streamer now
 if mode == "Webcam":
-    st.info("Make sure to allow webcam access in browser.")
-    
+    st.info("Make sure to allow webcam access.")
     webrtc_streamer(
         key="dehazing",
         video_processor_factory=lambda: st.session_state.processor,
         media_stream_constraints={"video": True, "audio": False}
+    )
+ream_constraints={"video": True, "audio": False}
     )
 
 elif mode == "Upload Image":
