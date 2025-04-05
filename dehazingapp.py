@@ -68,30 +68,7 @@ location = st.selectbox("Select location:", ["Patiala", "Thapar Campus"])
 model = load_model(location)
 
 # Store model in session state
-# Ensure model and processor are initialized
-# Only create processor if not already in session state
 if "processor" not in st.session_state:
-    class VideoProcessor:
-        def __init__(self):
-            self.model = None
-
-        def update_model(self, model):
-            self.model = model
-
-        def recv(self, frame):
-            import av
-            import cv2
-            import numpy as np
-            img = frame.to_ndarray(format="bgr24")
-            img_resized = cv2.resize(img, (256, 256))
-            img_normalized = (img_resized / 127.5) - 1.0
-            img_input = np.expand_dims(img_normalized, axis=0)
-
-            output = self.model.predict(img_input)[0]
-            output = ((output + 1) * 127.5).astype(np.uint8)
-            output = cv2.resize(output, (img.shape[1], img.shape[0]))
-            return av.VideoFrame.from_ndarray(output, format="bgr24")
-
     st.session_state.processor = VideoProcessor()
 
 # Update model every time user selects location
@@ -122,4 +99,3 @@ elif mode == "Upload Video":
             f.write(uploaded_vid.read())
         st.video(tfile)
         st.warning("Video dehazing not yet implemented frame-by-frame in cloud. Try image or webcam.")
-
