@@ -51,17 +51,13 @@ class VideoProcessor(VideoProcessorBase):
         self.ready = True
 
     def recv(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        print("Frame received.")  # Debug line
-        if self.ready and self.model:
-            input_frame = preprocess_frame(img)
-            output = self.model.predict(input_frame)
-            output_frame = postprocess_frame(output)
-            output_frame = cv2.cvtColor(output_frame, cv2.COLOR_RGB2BGR)
-            return av.VideoFrame.from_ndarray(output_frame, format="bgr24")
-        else:
-            print("Model not ready!")
-        return frame
+    img = frame.to_ndarray(format="bgr24")
+    print("Frame received.")  # Confirm this prints in logs
+
+    # Just invert colors for testing
+    inverted = 255 - img
+        return av.VideoFrame.from_ndarray(inverted, format="bgr24")
+
 
 
 # ----------------------
