@@ -51,11 +51,11 @@ class VideoProcessor(VideoProcessorBase):
         self.ready = True
 
     def recv(self, frame):
-    img = frame.to_ndarray(format="bgr24")
-    print("Frame received.")  # Confirm this prints in logs
+        img = frame.to_ndarray(format="bgr24")
+        print("Frame received.")  # Confirm this prints in logs
 
     # Just invert colors for testing
-    inverted = 255 - img
+        inverted = 255 - img
         return av.VideoFrame.from_ndarray(inverted, format="bgr24")
 
 
