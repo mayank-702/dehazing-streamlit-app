@@ -68,15 +68,24 @@ location = st.selectbox("Select location:", ["Patiala", "Thapar Campus"])
 model = load_model(location)
 
 # Store model in session state
-if "processor" not in st.session_state:
-    st.session_state.processor = VideoProcessor()
-st.session_state.processor.update_model(model)
+# Ensure model and processor are initialized
+if "model" not in st.session_state:
+    st.session_state.model = model
 
+if "processor" not in st.session_state:
+    processor = VideoProcessor()
+    processor.update_model(st.session_state.model)
+    st.session_state.processor = processor
+
+# Webcam mode
 if mode == "Webcam":
     st.info("Make sure to allow webcam access in browser.")
-    webrtc_streamer(key="dehazing",
-                    video_processor_factory=lambda: st.session_state.processor,
-                    media_stream_constraints={"video": True, "audio": False})
+    
+    webrtc_streamer(
+        key="dehazing",
+        video_processor_factory=lambda: st.session_state.processor,
+        media_stream_constraints={"video": True, "audio": False}
+    )
 
 elif mode == "Upload Image":
     uploaded_img = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
