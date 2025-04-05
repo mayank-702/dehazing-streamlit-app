@@ -70,6 +70,7 @@ model = load_model(location)
 # Store model in session state
 if "processor" not in st.session_state:
     st.session_state.processor = VideoProcessor()
+    st.session_state.processor.update_model(model)
 
 # Update model every time user selects location
 st.session_state.processor.update_model(model)
