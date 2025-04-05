@@ -79,7 +79,7 @@ model = load_model(location)
 # Initialize processor in session state if not already there
 if "processor" not in st.session_state:
     st.session_state.processor = VideoProcessor()
-st.session_state.processor.update_model(model)
+    st.session_state.processor.update_model(model)
 
 # ----------------------
 # Handle Modes
