@@ -43,27 +43,22 @@ def postprocess_frame(output):
 
 class VideoProcessor(VideoProcessorBase):
     def __init__(self):
+        self.model = None
+        self.ready = False
+
+    def update_model(self, model):
         self.model = model
         self.ready = True
-        self.frame_count = 0
-        self.last_output_frame = None
 
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
-        self.frame_count += 1
-
-        if self.ready and self.model and self.frame_count % 5 == 0:
+        if self.ready and self.model:
             input_frame = preprocess_frame(img)
             output = self.model.predict(input_frame)
             output_frame = postprocess_frame(output)
             output_frame = cv2.cvtColor(output_frame, cv2.COLOR_RGB2BGR)
-            self.last_output_frame = output_frame
-        elif self.last_output_frame is not None:
-            output_frame = self.last_output_frame
-        else:
-            output_frame = img
-
-        return av.VideoFrame.from_ndarray(output_frame, format="bgr24")
+            return av.VideoFrame.from_ndarray(output_frame, format="bgr24")
+        return frame
 
 
 # ----------------------
@@ -79,7 +74,7 @@ model = load_model(location)
 # Initialize processor in session state if not already there
 if "processor" not in st.session_state:
     st.session_state.processor = VideoProcessor()
-    st.session_state.processor.update_model(model)
+st.session_state.processor.update_model(model)
 
 # ----------------------
 # Handle Modes
