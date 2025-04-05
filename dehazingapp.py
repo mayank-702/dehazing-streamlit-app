@@ -106,7 +106,7 @@ if mode == "Webcam":
         media_stream_constraints={"video": True, "audio": False}
     )
 ream_constraints={"video": True, "audio": False}
-    )
+)
 
 elif mode == "Upload Image":
     uploaded_img = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
