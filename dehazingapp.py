@@ -43,33 +43,27 @@ def postprocess_frame(output):
 
 class VideoProcessor(VideoProcessorBase):
     def __init__(self):
-        self.model = None
-        self.ready = False
-
-    def update_model(self, model):
         self.model = model
         self.ready = True
+        self.frame_count = 0
+        self.last_output_frame = None
 
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
-        print("Frame received.")  # Log to confirm
+        self.frame_count += 1
 
-        if self.ready and self.model:
+        if self.ready and self.model and self.frame_count % 5 == 0:
             input_frame = preprocess_frame(img)
-            print("Input shape:", input_frame.shape)
-
             output = self.model.predict(input_frame)
-            print("Output shape:", output.shape)
-
             output_frame = postprocess_frame(output)
             output_frame = cv2.cvtColor(output_frame, cv2.COLOR_RGB2BGR)
-
-            return av.VideoFrame.from_ndarray(output_frame, format="bgr24")
+            self.last_output_frame = output_frame
+        elif self.last_output_frame is not None:
+            output_frame = self.last_output_frame
         else:
-            print("Model not ready!")
+            output_frame = img
 
-        return av.VideoFrame.from_ndarray(img, format="bgr24")
-
+        return av.VideoFrame.from_ndarray(output_frame, format="bgr24")
 
 
 # ----------------------
