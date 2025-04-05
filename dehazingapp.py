@@ -1,103 +1,97 @@
 import streamlit as st
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
+import av
 import cv2
 import numpy as np
-from PIL import Image
 import tensorflow as tf
 import gdown
 import os
 
-# Mapping of location to Google Drive model file IDs
-import gdown
-
-
-def download_model(location):
+# Model loader
+@st.cache_resource
+def load_model(location):
     if location == "Patiala":
-        url = "https://drive.google.com/uc?id=19hbgk6afotZ6rt_LV9y8qK7Jiw3kWRbQ"
+        file_id = "19hbgk6afotZ6rt_LV9y8qK7Jiw3kWRbQ"
         filename = "mixed_noaug.keras"
-    elif location == "Thapar Campus":
-        url = "https://drive.google.com/uc?id=1HIwQqPoZShblcuG4Sc2kJ5qoi4w18ZTS"
-        filename = "pix2pix.keras"
     else:
-        return None
+        file_id = "1HIwQqPoZShblcuG4Sc2kJ5qoi4w18ZTS"
+        filename = "pix2pix.keras"
 
-    gdown.download(url, filename, quiet=False)
-    return filename
+    if not os.path.exists(filename):
+        url = f"https://drive.google.com/uc?id={file_id}"
+        gdown.download(url, filename, quiet=False)
 
+    return tf.keras.models.load_model(filename)
 
-# Preprocessing function
-def preprocess_image(image):
-    image = image.resize((256, 256))
-    img = np.array(image).astype(np.float32)
-    img = (img / 127.5) - 1.0
-    img = np.expand_dims(img, axis=0)
-    return img
+# Frame preprocessing
+def preprocess_frame(frame):
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    frame = cv2.resize(frame, (256, 256))
+    frame = frame.astype(np.float32) / 127.5 - 1
+    return np.expand_dims(frame, axis=0)
 
-# Postprocessing function
-def postprocess_image(predicted):
-    output = (predicted[0] + 1) * 127.5
-    output = np.clip(output, 0, 255).astype(np.uint8)
-    return output
+# Postprocessing
+def postprocess_frame(output):
+    frame = (output[0] + 1) * 127.5
+    return np.clip(frame, 0, 255).astype(np.uint8)
 
-# Streamlit UI
-st.title("🌫️ Real-Time Dehazing App")
+# WebRTC VideoProcessor
+class VideoProcessor(VideoProcessorBase):
+    def __init__(self):
+        self.model = None
+        self.ready = False
 
-# Model location dropdown
-location = st.selectbox("Choose location", ["Patiala", "Thapar Campus"])
+    def update_model(self, model):
+        self.model = model
+        self.ready = True
 
-# Load model
-model_file = download_model(location)
-model = tf.keras.models.load_model(model_file)
-st.success(f"Model loaded: {model_file}")
+    def recv(self, frame):
+        img = frame.to_ndarray(format="bgr24")
+        if self.ready and self.model:
+            input_frame = preprocess_frame(img)
+            output = self.model.predict(input_frame)
+            output_frame = postprocess_frame(output)
+            output_frame = cv2.cvtColor(output_frame, cv2.COLOR_RGB2BGR)
+            return av.VideoFrame.from_ndarray(output_frame, format="bgr24")
+        return frame
 
-# Input mode selection
-mode = st.radio("Select input mode", ["📷 Webcam", "🎥 Upload Video", "🖼️ Upload Image"])
+# UI
+st.title("📷 Real-Time Dehazing (WebRTC-enabled)")
 
-# Exit control (simulate by using session state)
-if "stop" not in st.session_state:
-    st.session_state["stop"] = False
+# Select mode
+mode = st.radio("Choose input method:", ["Webcam", "Upload Image", "Upload Video"])
 
-if st.button("❌ Exit"):
-    st.session_state["stop"] = True
+# Select location
+location = st.selectbox("Select location:", ["Patiala", "Thapar Campus"])
 
-if not st.session_state["stop"]:
+# Load model once based on location
+model = load_model(location)
 
-    if mode == "📷 Webcam":
-        st.info("Webcam support only works locally or with `streamlit-webrtc` integration.")
-        st.warning("Run locally to test webcam support or use video/image input here on cloud.")
+# Store model in session state
+if "processor" not in st.session_state:
+    st.session_state.processor = VideoProcessor()
+st.session_state.processor.update_model(model)
 
-    elif mode == "🎥 Upload Video":
-        uploaded_video = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
-        if uploaded_video:
-            tfile = open("temp_video.mp4", 'wb')
-            tfile.write(uploaded_video.read())
-            tfile.close()
+if mode == "Webcam":
+    st.info("Make sure to allow webcam access in browser.")
+    webrtc_streamer(key="dehazing",
+                    video_processor_factory=lambda: st.session_state.processor,
+                    media_stream_constraints={"video": True, "audio": False})
 
-            cap = cv2.VideoCapture("temp_video.mp4")
-            stframe = st.empty()
+elif mode == "Upload Image":
+    uploaded_img = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
+    if uploaded_img:
+        img = cv2.imdecode(np.frombuffer(uploaded_img.read(), np.uint8), 1)
+        input_img = preprocess_frame(img)
+        output_img = postprocess_frame(model.predict(input_img))
+        st.image([img, output_img], caption=["Original", "Dehazed"], channels="BGR")
 
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    break
+elif mode == "Upload Video":
+    uploaded_vid = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
+    if uploaded_vid:
+        tfile = f"temp_video.mp4"
+        with open(tfile, "wb") as f:
+            f.write(uploaded_vid.read())
+        st.video(tfile)
+        st.warning("Video dehazing not yet implemented frame-by-frame in cloud. Try image or webcam.")
 
-                img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                pil_img = Image.fromarray(img)
-                input_img = preprocess_image(pil_img)
-                output = model.predict(input_img)
-                out_img = postprocess_image(output)
-
-                stframe.image(out_img, channels="RGB", use_column_width=True)
-
-            cap.release()
-
-    elif mode == "🖼️ Upload Image":
-        uploaded_img = st.file_uploader("Upload an image", type=["jpg", "png", "jpeg"])
-        if uploaded_img:
-            image = Image.open(uploaded_img).convert("RGB")
-            st.image(image, caption="Original Image", use_column_width=True)
-
-            input_img = preprocess_image(image)
-            output = model.predict(input_img)
-            out_img = postprocess_image(output)
-
-            st.image(out_img, caption="Dehazed Image", use_column_width=True)
