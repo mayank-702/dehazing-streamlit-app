@@ -105,8 +105,6 @@ if mode == "Webcam":
         video_processor_factory=lambda: st.session_state.processor,
         media_stream_constraints={"video": True, "audio": False}
     )
-ream_constraints={"video": True, "audio": False}
-)
 
 elif mode == "Upload Image":
     uploaded_img = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
