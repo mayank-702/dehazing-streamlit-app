@@ -81,13 +81,22 @@ st.session_state.processor.update_model(model)
 # ----------------------
 # Handle Modes
 # ----------------------
+# --- Inside the Webcam block ---
+
 if mode == "Webcam":
     st.info("Make sure to allow webcam access.")
+
+    def processor_factory():
+        processor = VideoProcessor()
+        processor.update_model(model)
+        return processor
+
     webrtc_streamer(
         key="dehazing",
-        video_processor_factory=lambda: st.session_state.processor,
+        video_processor_factory=processor_factory,
         media_stream_constraints={"video": True, "audio": False}
     )
+
 
 elif mode == "Upload Image":
     uploaded_img = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
