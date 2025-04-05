@@ -87,7 +87,7 @@ if mode == "Webcam":
     st.info("Make sure to allow webcam access.")
 
     def processor_factory():
-    return st.session_state.processor
+        return st.session_state.processor
 
     webrtc_streamer(
         key="dehazing",
