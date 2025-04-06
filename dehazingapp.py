@@ -20,7 +20,6 @@ def load_model(location):
         file_id = "1HIwQqPoZShblcuG4Sc2kJ5qoi4w18ZTS"
         filename = "pix2pix.keras"
 
-    # Ensure model is downloaded correctly
     if not os.path.exists(filename):
         url = f"https://drive.google.com/uc?id={file_id}"
         try:
@@ -79,25 +78,22 @@ class DehazingProcessor(VideoProcessorBase):
 # ----------------------
 st.title("🌥️ Real-Time Cloud Dehazing")
 
-# Initialize session state
 if "processor" not in st.session_state:
     st.session_state.processor = DehazingProcessor()
 
-# Model loading
 location = st.selectbox("Select location model:", ["Patiala", "Thapar Campus"])
 model = load_model(location)
 
 if model is None:
     st.stop()
 
-# Update processor with new model
 st.session_state.processor.update_model(model)
 
 # WebRTC Configuration
 RTC_CONFIG = {
     "iceServers": [
         {"urls": ["stun:stun.l.google.com:19302"]},
-        {"urls": "stun:global.stun.twilio.com:3478?transport=udp"}
+        {"urls": "stun:global.stun.twilio.com:3478"}
     ]
 }
 
