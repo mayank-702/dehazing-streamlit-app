@@ -41,13 +41,15 @@ def postprocess_frame(output):
 
 
 
+import threading
+
 class VideoProcessor(VideoProcessorBase):
     def __init__(self):
         self.model = None
         self.ready = False
-        self.frame_count = 0
-        self.last_output = None
-        self.process_every_n_frames = 5  # Adjust as needed
+        self.output_frame = None
+        self.lock = threading.Lock()
+        self.thread_started = False
 
     def update_model(self, model):
         self.model = model
@@ -56,23 +58,37 @@ class VideoProcessor(VideoProcessorBase):
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
 
-        if self.ready and self.model:
-            self.frame_count += 1
+        # Start processing thread once
+        if not self.thread_started and self.ready:
+            self.thread_started = True
+            threading.Thread(target=self._process_loop, daemon=True).start()
 
-            if self.frame_count % self.process_every_n_frames == 0:
-                input_frame = preprocess_frame(img)
-                output = self.model.predict(input_frame, verbose=0)
-                output_frame = postprocess_frame(output)
-                output_frame = cv2.cvtColor(output_frame, cv2.COLOR_RGB2BGR)
-                self.last_output = output_frame
-            elif self.last_output is not None:
-                output_frame = self.last_output
-            else:
-                output_frame = img  # fallback
+        with self.lock:
+            display_frame = self.output_frame if self.output_frame is not None else img
 
-            return av.VideoFrame.from_ndarray(output_frame, format="bgr24")
+        return av.VideoFrame.from_ndarray(display_frame, format="bgr24")
 
-        return frame
+    def _process_loop(self):
+        while True:
+            if not self.ready:
+                continue
+            # Skip processing unless last frame exists
+            try:
+                with self.lock:
+                    input_frame = self.output_frame
+
+                if input_frame is not None:
+                    processed_input = preprocess_frame(input_frame)
+                    output = self.model.predict(processed_input, verbose=0)
+                    processed_output = postprocess_frame(output)
+                    processed_output = cv2.cvtColor(processed_output, cv2.COLOR_RGB2BGR)
+
+                    with self.lock:
+                        self.output_frame = processed_output
+
+            except Exception as e:
+                print("Error in processing thread:", e)
+
 
 
 
