@@ -4,7 +4,7 @@ import av
 import cv2
 import numpy as np
 import tensorflow as tf
-import gdown
+import urllib.request
 import os
 
 # ----------------------
@@ -19,11 +19,20 @@ def load_model(location):
         file_id = "1HIwQqPoZShblcuG4Sc2kJ5qoi4w18ZTS"
         filename = "pix2pix.keras"
 
+    # Ensure model is downloaded correctly
     if not os.path.exists(filename):
         url = f"https://drive.google.com/uc?id={file_id}"
-        gdown.download(url, filename, quiet=False)
+        try:
+            urllib.request.urlretrieve(url, filename)
+        except Exception as e:
+            st.error(f"Failed to download model: {e}")
+            return None
 
-    return tf.keras.models.load_model(filename)
+    try:
+        return tf.keras.models.load_model(filename)
+    except Exception as e:
+        st.error(f"Failed to load model: {e}")
+        return None
 
 
 # ----------------------
@@ -35,10 +44,10 @@ def preprocess_frame(frame):
     frame = frame.astype(np.float32) / 127.5 - 1
     return np.expand_dims(frame, axis=0)
 
+
 def postprocess_frame(output):
     frame = (output[0] + 1) * 127.5
     return np.clip(frame, 0, 255).astype(np.uint8)
-
 
 
 class VideoProcessor(VideoProcessorBase):
@@ -71,6 +80,9 @@ location = st.selectbox("Select location:", ["Patiala", "Thapar Campus"])
 
 model = load_model(location)
 
+if model is None:
+    st.stop()
+
 # Initialize processor in session state if not already there
 if "processor" not in st.session_state:
     st.session_state.processor = VideoProcessor()
@@ -79,21 +91,17 @@ st.session_state.processor.update_model(model)
 # ----------------------
 # Handle Modes
 # ----------------------
-# --- Inside the Webcam block ---
-
 if mode == "Webcam":
     st.info("Make sure to allow webcam access.")
 
     def processor_factory():
         return st.session_state.get("processor", VideoProcessor())
 
-
     webrtc_streamer(
         key="dehazing",
         video_processor_factory=processor_factory,
         media_stream_constraints={"video": True, "audio": False}
     )
-
 
 elif mode == "Upload Image":
     uploaded_img = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
@@ -106,8 +114,14 @@ elif mode == "Upload Image":
 elif mode == "Upload Video":
     uploaded_vid = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
     if uploaded_vid:
-        tfile = f"temp_video.mp4"
-        with open(tfile, "wb") as f:
+        tfile_path = f"temp_video.mp4"
+        
+        # Save video locally for processing
+        with open(tfile_path, "wb") as f:
             f.write(uploaded_vid.read())
-        st.video(tfile)
+        
+        # Show uploaded video (no processing yet)
+        st.video(tfile_path)
+        
+        # Warn users about limitations of cloud processing for videos
         st.warning("Video dehazing not yet implemented frame-by-frame in cloud. Try image or webcam.")
