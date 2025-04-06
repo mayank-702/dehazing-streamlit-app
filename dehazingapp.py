@@ -4,12 +4,11 @@ import av
 import cv2
 import numpy as np
 import tensorflow as tf
-import urllib.request
+import gdown
 import os
-import threading
 
 # ----------------------
-# Model Loading
+# Load the ML Model
 # ----------------------
 @st.cache_resource
 def load_model(location):
@@ -22,120 +21,93 @@ def load_model(location):
 
     if not os.path.exists(filename):
         url = f"https://drive.google.com/uc?id={file_id}"
-        try:
-            urllib.request.urlretrieve(url, filename)
-        except Exception as e:
-            st.error(f"Failed to download model: {e}")
-            return None
+        gdown.download(url, filename, quiet=False)
 
-    try:
-        return tf.keras.models.load_model(filename)
-    except Exception as e:
-        st.error(f"Failed to load model: {e}")
-        return None
+    return tf.keras.models.load_model(filename)
+
 
 # ----------------------
-# Video Processing
+# Frame Pre/Postprocessing
 # ----------------------
-class DehazingProcessor(VideoProcessorBase):
+def preprocess_frame(frame):
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    frame = cv2.resize(frame, (256, 256))
+    frame = frame.astype(np.float32) / 127.5 - 1
+    return np.expand_dims(frame, axis=0)
+
+def postprocess_frame(output):
+    frame = (output[0] + 1) * 127.5
+    return np.clip(frame, 0, 255).astype(np.uint8)
+
+
+
+class VideoProcessor(VideoProcessorBase):
     def __init__(self):
-        self._model_lock = threading.Lock()
-        self._model = None
-        self._frame_counter = 0
+        self.model = None
+        self.ready = False
 
     def update_model(self, model):
-        with self._model_lock:
-            self._model = model
+        self.model = model
+        self.ready = True
 
     def recv(self, frame):
-        try:
-            img = frame.to_ndarray(format="bgr24")
-            
-            with self._model_lock:
-                if self._model:
-                    # Process every frame
-                    input_tensor = cv2.resize(img, (256, 256))
-                    input_tensor = cv2.cvtColor(input_tensor, cv2.COLOR_BGR2RGB)
-                    input_tensor = (input_tensor.astype(np.float32) / 127.5) - 1.0
-                    input_tensor = np.expand_dims(input_tensor, axis=0)
-                    
-                    output = self._model.predict(input_tensor)
-                    
-                    # Post-process output
-                    output_frame = (output[0] + 1) * 127.5
-                    output_frame = np.clip(output_frame, 0, 255).astype(np.uint8)
-                    output_frame = cv2.cvtColor(output_frame, cv2.COLOR_RGB2BGR)
-                    
-                    return av.VideoFrame.from_ndarray(output_frame, format="bgr24")
+        img = frame.to_ndarray(format="bgr24")
+        if self.ready and self.model:
+            input_frame = preprocess_frame(img)
+            output = self.model.predict(input_frame)
+            output_frame = postprocess_frame(output)
+            output_frame = cv2.cvtColor(output_frame, cv2.COLOR_RGB2BGR)
+            return av.VideoFrame.from_ndarray(output_frame, format="bgr24")
+        return frame
 
-        except Exception as e:
-            st.error(f"Frame processing error: {str(e)}")
-        
-        return frame  # Fallback to original frame
 
 # ----------------------
 # Streamlit UI
 # ----------------------
-st.title("🌥️ Real-Time Cloud Dehazing")
+st.title("📷 Real-Time Dehazing (WebRTC-enabled)")
 
-if "processor" not in st.session_state:
-    st.session_state.processor = DehazingProcessor()
+mode = st.radio("Choose input method:", ["Webcam", "Upload Image", "Upload Video"])
+location = st.selectbox("Select location:", ["Patiala", "Thapar Campus"])
 
-location = st.selectbox("Select location model:", ["Patiala", "Thapar Campus"])
 model = load_model(location)
 
-if model is None:
-    st.stop()
-
+# Initialize processor in session state if not already there
+if "processor" not in st.session_state:
+    st.session_state.processor = VideoProcessor()
 st.session_state.processor.update_model(model)
 
-# WebRTC Configuration
-RTC_CONFIG = {
-    "iceServers": [
-        {"urls": ["stun:stun.l.google.com:19302"]},
-        {"urls": "stun:global.stun.twilio.com:3478"}
-    ]
-}
-
-mode = st.radio("Input Mode:", ["Webcam", "Image Upload"])
+# ----------------------
+# Handle Modes
+# ----------------------
+# --- Inside the Webcam block ---
 
 if mode == "Webcam":
-    st.info("Allow camera access when prompted")
+    st.info("Make sure to allow webcam access.")
+
+    def processor_factory():
+        return st.session_state.get("processor", VideoProcessor())
+
+
     webrtc_streamer(
         key="dehazing",
-        video_processor_factory=lambda: st.session_state.processor,
-        rtc_configuration=RTC_CONFIG,
-        media_stream_constraints={
-            "video": {
-                "width": {"ideal": 640},
-                "height": {"ideal": 480},
-                "frameRate": {"ideal": 24}
-            },
-            "audio": False
-        },
-        async_processing=True
+        video_processor_factory=processor_factory,
+        media_stream_constraints={"video": True, "audio": False}
     )
 
-elif mode == "Image Upload":
-    uploaded_file = st.file_uploader("Upload hazy image", type=["jpg", "png", "jpeg"])
-    if uploaded_file:
-        file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-        img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-        
-        # Process image
-        input_tensor = cv2.resize(img, (256, 256))
-        input_tensor = cv2.cvtColor(input_tensor, cv2.COLOR_BGR2RGB)
-        input_tensor = (input_tensor.astype(np.float32) / 127.5) - 1.0
-        input_tensor = np.expand_dims(input_tensor, axis=0)
-        
-        output = model.predict(input_tensor)
-        output_frame = (output[0] + 1) * 127.5
-        output_frame = np.clip(output_frame, 0, 255).astype(np.uint8)
-        output_frame = cv2.cvtColor(output_frame, cv2.COLOR_RGB2BGR)
-        
-        # Display comparison
-        col1, col2 = st.columns(2)
-        with col1:
-            st.image(img, channels="BGR", caption="Original Image")
-        with col2:
-            st.image(output_frame, channels="BGR", caption="Dehazed Image")
+
+elif mode == "Upload Image":
+    uploaded_img = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
+    if uploaded_img:
+        img = cv2.imdecode(np.frombuffer(uploaded_img.read(), np.uint8), 1)
+        input_img = preprocess_frame(img)
+        output_img = postprocess_frame(model.predict(input_img))
+        st.image([img, output_img], caption=["Original", "Dehazed"], channels="BGR")
+
+elif mode == "Upload Video":
+    uploaded_vid = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
+    if uploaded_vid:
+        tfile = f"temp_video.mp4"
+        with open(tfile, "wb") as f:
+            f.write(uploaded_vid.read())
+        st.video(tfile)
+        st.warning("Video dehazing not yet implemented frame-by-frame in cloud. Try image or webcam.")
