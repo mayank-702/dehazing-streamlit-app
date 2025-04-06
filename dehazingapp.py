@@ -13,28 +13,26 @@ import threading
 # ----------------------
 @st.cache_resource
 def load_model(location):
-    model_file = "model.keras"
-    model_url = (
-        "https://drive.google.com/uc?id=19hbgk6afotZ6rt_LV9y8qK7Jiw3kWRbQ"
-        if location == "Patiala" 
-        else "https://drive.google.com/uc?id=1HIwQqPoZShblcuG4Sc2kJ5qoi4w18ZTS"
-    )
-    
-    if not os.path.exists(model_file):
+    if location == "Patiala":
+        file_id = "19hbgk6afotZ6rt_LV9y8qK7Jiw3kWRbQ"
+        filename = "mixed_noaug.keras"
+    else:
+        file_id = "1HIwQqPoZShblcuG4Sc2kJ5qoi4w18ZTS"
+        filename = "pix2pix.keras"
+
+    # Ensure model is downloaded correctly
+    if not os.path.exists(filename):
+        url = f"https://drive.google.com/uc?id={file_id}"
         try:
-            urllib.request.urlretrieve(model_url, model_file)
+            urllib.request.urlretrieve(url, filename)
         except Exception as e:
-            st.error(f"Model download failed: {str(e)}")
+            st.error(f"Failed to download model: {e}")
             return None
 
     try:
-        model = tf.keras.models.load_model(model_file)
-        # Warmup the model
-        dummy_input = np.zeros((1, 256, 256, 3), dtype=np.float32)
-        model.predict(dummy_input)
-        return model
+        return tf.keras.models.load_model(filename)
     except Exception as e:
-        st.error(f"Model loading failed: {str(e)}")
+        st.error(f"Failed to load model: {e}")
         return None
 
 # ----------------------
