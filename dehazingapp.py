@@ -45,6 +45,9 @@ class VideoProcessor(VideoProcessorBase):
     def __init__(self):
         self.model = None
         self.ready = False
+        self.frame_count = 0
+        self.last_output = None
+        self.process_every_n_frames = 5  # Adjust as needed
 
     def update_model(self, model):
         self.model = model
@@ -52,13 +55,25 @@ class VideoProcessor(VideoProcessorBase):
 
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
+
         if self.ready and self.model:
-            input_frame = preprocess_frame(img)
-            output = self.model.predict(input_frame)
-            output_frame = postprocess_frame(output)
-            output_frame = cv2.cvtColor(output_frame, cv2.COLOR_RGB2BGR)
+            self.frame_count += 1
+
+            if self.frame_count % self.process_every_n_frames == 0:
+                input_frame = preprocess_frame(img)
+                output = self.model.predict(input_frame, verbose=0)
+                output_frame = postprocess_frame(output)
+                output_frame = cv2.cvtColor(output_frame, cv2.COLOR_RGB2BGR)
+                self.last_output = output_frame
+            elif self.last_output is not None:
+                output_frame = self.last_output
+            else:
+                output_frame = img  # fallback
+
             return av.VideoFrame.from_ndarray(output_frame, format="bgr24")
+
         return frame
+
 
 
 # ----------------------
