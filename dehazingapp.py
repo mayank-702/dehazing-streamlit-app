@@ -6,7 +6,6 @@ import numpy as np
 import tensorflow as tf
 import gdown
 import os
-import threading
 
 # ----------------------
 # Load the ML Model
@@ -26,6 +25,7 @@ def load_model(location):
 
     return tf.keras.models.load_model(filename)
 
+
 # ----------------------
 # Frame Pre/Postprocessing
 # ----------------------
@@ -39,77 +39,60 @@ def postprocess_frame(output):
     frame = (output[0] + 1) * 127.5
     return np.clip(frame, 0, 255).astype(np.uint8)
 
+
 # ----------------------
-# Video Processor with Background Thread
+# Video Processor Class
 # ----------------------
 class VideoProcessor(VideoProcessorBase):
-    def __init__(self):
-        self.model = None
-        self.ready = False
-        self.output_frame = None
-        self.input_frame = None
-        self.lock = threading.Lock()
-        self.thread = None
-        self.frame_count = 0
-
-    def update_model(self, model):
+    def __init__(self, model):
         self.model = model
-        self.ready = True
-        if self.thread is None:
-            self.thread = threading.Thread(target=self.process_loop, daemon=True)
-            self.thread.start()
+        self.counter = 0  # To skip frames
 
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
-        with self.lock:
-            self.input_frame = img.copy()
-            display_frame = self.output_frame if self.output_frame is not None else img
 
-        return av.VideoFrame.from_ndarray(display_frame, format="bgr24")
+        # Optional: skip every other frame to reduce load
+        self.counter += 1
+        if self.counter % 2 != 0:
+            return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-    def process_loop(self):
-        while True:
-            if not self.ready:
-                continue
+        try:
+            input_img = preprocess_frame(img)
+            output = self.model.predict(input_img)
+            result = postprocess_frame(output)
+            result_bgr = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
+            return av.VideoFrame.from_ndarray(result_bgr, format="bgr24")
+        except Exception as e:
+            print("Prediction error:", e)
+            return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-            with self.lock:
-                frame = self.input_frame.copy() if self.input_frame is not None else None
-
-            if frame is not None:
-                try:
-                    self.frame_count += 1
-                    if self.frame_count % 5 == 0:
-                        input_tensor = preprocess_frame(frame)
-                        output_tensor = self.model.predict(input_tensor, verbose=0)
-                        result = postprocess_frame(output_tensor)
-                        result = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
-                        with self.lock:
-                            self.output_frame = result
-                except Exception as e:
-                    print("Error in processing:", e)
 
 # ----------------------
 # Streamlit UI
 # ----------------------
-st.title("\U0001F4F7 Real-Time Dehazing (WebRTC-enabled)")
+st.title("📷 Real-Time Dehazing (WebRTC-enabled)")
 
 mode = st.radio("Choose input method:", ["Webcam", "Upload Image", "Upload Video"])
 location = st.selectbox("Select location:", ["Patiala", "Thapar Campus"])
 
 model = load_model(location)
 
-if "processor" not in st.session_state:
-    st.session_state.processor = VideoProcessor()
-st.session_state.processor.update_model(model)
-
+# ----------------------
+# Webcam Stream
+# ----------------------
 if mode == "Webcam":
-    st.info("Make sure to allow webcam access.")
+    st.info("Allow webcam access when prompted.")
+
     webrtc_streamer(
         key="dehazing",
-        video_processor_factory=lambda: st.session_state.processor,
-        media_stream_constraints={"video": True, "audio": False}
+        video_processor_factory=lambda: VideoProcessor(model),
+        media_stream_constraints={"video": True, "audio": False},
+        async_processing=True
     )
 
+# ----------------------
+# Image Upload
+# ----------------------
 elif mode == "Upload Image":
     uploaded_img = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
     if uploaded_img:
@@ -118,6 +101,9 @@ elif mode == "Upload Image":
         output_img = postprocess_frame(model.predict(input_img))
         st.image([img, output_img], caption=["Original", "Dehazed"], channels="BGR")
 
+# ----------------------
+# Video Upload
+# ----------------------
 elif mode == "Upload Video":
     uploaded_vid = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
     if uploaded_vid:
@@ -125,4 +111,4 @@ elif mode == "Upload Video":
         with open(tfile, "wb") as f:
             f.write(uploaded_vid.read())
         st.video(tfile)
-        st.warning("Video dehazing not yet implemented frame-by-frame in cloud. Try image or webcam.")
+        st.warning("Frame-by-frame dehazing for videos isn't implemented yet.")
