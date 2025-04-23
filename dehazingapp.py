@@ -1,11 +1,11 @@
 import streamlit as st
+import cv2
 import numpy as np
 import tensorflow as tf
 import gdown
 import os
 import threading
 import time
-import cv2
 
 # ----------------------------
 # Model info: Google Drive file IDs and filenames
@@ -34,6 +34,20 @@ def load_cloud_model(location):
     return model
 
 # ----------------------------
+# # Jetson Camera GStreamer pipeline
+# # ----------------------------
+# def gstreamer_pipeline(sensor_id=0, flip_method=2):
+#     return (
+#         f"nvarguscamerasrc sensor-id={sensor_id} ! "
+#         "video/x-raw(memory:NVMM), format=NV12, width=1280, height=720, framerate=30/1 ! "
+#         f"nvvidconv flip-method={flip_method} ! "
+#         "video/x-raw, format=BGRx ! "
+#         "videoconvert ! "
+#         "video/x-raw, format=BGR ! "
+#         "appsink drop=1"
+#     )
+
+# ----------------------------
 # Frame preprocess/postprocess
 # ----------------------------
 def preprocess_frame(frame):
@@ -48,10 +62,11 @@ def postprocess_frame(output):
     return img
 
 # ----------------------------
-# Video capture thread using OpenCV for USB webcam
+# Background video capture thread
 # ----------------------------
 class VideoCaptureThread:
     def __init__(self, src=0):
+        # Use OpenCV default capture for USB webcam
         self.cap = cv2.VideoCapture(src)
         if not self.cap.isOpened():
             raise RuntimeError("Failed to open camera!")
@@ -61,6 +76,7 @@ class VideoCaptureThread:
         self.thread = threading.Thread(target=self.update, daemon=True)
         self.thread.start()
 
+
     def update(self):
         while not self.stopped:
             ret, frame = self.cap.read()
@@ -68,7 +84,6 @@ class VideoCaptureThread:
                 with self.lock:
                     self.frame = frame
             else:
-                print("Frame read failed, retrying...")
                 time.sleep(0.01)
 
     def read(self):
@@ -84,7 +99,7 @@ class VideoCaptureThread:
 # Streamlit app main function
 # ----------------------------
 def main():
-    st.title("🟢 Jetson USB Webcam Real-Time Dehazing with Model Selection")
+    st.title("🟢 Jetson AGX Orin Real-Time Dehazing with Model Selection")
 
     # Model selection dropdown with unique key
     location = st.selectbox("Select Location / Model", options=list(MODEL_INFO.keys()), key="model_select")
@@ -99,8 +114,8 @@ def main():
         # Initialize video capture thread once and store in session_state
         if "video_thread" not in st.session_state:
             try:
-                st.session_state.video_thread = VideoCaptureThread(src=0)  # USB webcam device index 0
-            except Exception as e:
+                st.session_state.video_thread = VideoCaptureThread()
+            except RuntimeError as e:
                 st.error(f"Camera error: {e}")
                 return
 
