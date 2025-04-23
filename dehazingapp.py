@@ -6,7 +6,6 @@ import os
 import threading
 import time
 import cv2
-import nanocamera
 
 # ----------------------------
 # Model info: Google Drive file IDs and filenames
@@ -49,19 +48,13 @@ def postprocess_frame(output):
     return img
 
 # ----------------------------
-# Video capture thread using NanoCamera
+# Video capture thread using OpenCV for USB webcam
 # ----------------------------
 class VideoCaptureThread:
-    def __init__(self, camera_type='USB', width=1280, height=720, fps=30, flip=0):
-        """
-        camera_type: 'USB' or 'CSI'
-        """
-        if camera_type == 'CSI':
-            # CSI camera index is 1 for NanoCamera
-            self.camera = nanocamera.Camera(camera_type=1, width=width, height=height, fps=fps, flip=flip)
-        else:
-            # USB camera index is 0
-            self.camera = nanocamera.Camera(camera_type=0, width=width, height=height, fps=fps, flip=flip)
+    def __init__(self, src=0):
+        self.cap = cv2.VideoCapture(src)
+        if not self.cap.isOpened():
+            raise RuntimeError("Failed to open camera!")
         self.frame = None
         self.stopped = False
         self.lock = threading.Lock()
@@ -70,11 +63,12 @@ class VideoCaptureThread:
 
     def update(self):
         while not self.stopped:
-            frame = self.camera.read()
-            if frame is not None:
+            ret, frame = self.cap.read()
+            if ret:
                 with self.lock:
                     self.frame = frame
             else:
+                print("Frame read failed, retrying...")
                 time.sleep(0.01)
 
     def read(self):
@@ -84,19 +78,16 @@ class VideoCaptureThread:
     def stop(self):
         self.stopped = True
         self.thread.join()
-        self.camera.release()
+        self.cap.release()
 
 # ----------------------------
 # Streamlit app main function
 # ----------------------------
 def main():
-    st.title("🟢 Jetson AGX Orin / Nano Real-Time Dehazing with Model & Camera Selection")
+    st.title("🟢 Jetson USB Webcam Real-Time Dehazing with Model Selection")
 
     # Model selection dropdown with unique key
     location = st.selectbox("Select Location / Model", options=list(MODEL_INFO.keys()), key="model_select")
-
-    # Camera type selection
-    camera_type = st.selectbox("Select Camera Type", options=["USB", "CSI"], key="camera_type_select")
 
     # Load selected model (cached)
     model = load_cloud_model(location)
@@ -108,7 +99,7 @@ def main():
         # Initialize video capture thread once and store in session_state
         if "video_thread" not in st.session_state:
             try:
-                st.session_state.video_thread = VideoCaptureThread(camera_type=camera_type)
+                st.session_state.video_thread = VideoCaptureThread(src=0)  # USB webcam device index 0
             except Exception as e:
                 st.error(f"Camera error: {e}")
                 return
