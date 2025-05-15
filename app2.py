@@ -12,24 +12,24 @@ import time
 # ----------------------------
 MODEL_INFO = {
     "Patiala": {
-        "file_id": "19hbgk6afotZ6rt_LV9y8qK7Jiw3kWRbQ",
-        "filename": "mixed_noaug.keras",
+        "file_id": "1l_ocEtBK2mtejCeYH0rh0eVH2GiV24Of",
+        "filename": "model1.h5",
     },
     "Thapar Campus": {
-        "file_id": "1HIwQqPoZShblcuG4Sc2kJ5qoi4w18ZTS",
-        "filename": "pix2pix.keras",
+        "file_id": "1mJO0ZcnMyPWq0ZbDb04AElnhLws3fUqk",
+        "filename": "model2.h5",
     },
     "Model 3": {
-        "file_id": "1lSkp_-ysHgr86Wino0vKyOM2C77nPo3x",
-        "filename": "model3.keras",
+        "file_id": "1PDZcOGlij0jEAq7761G4eHB4PjT-Xzpq",
+        "filename": "model3.h5",
     },
     "Model 4": {
-        "file_id": "1VqHhisHF1rymm4eFPNxb8sh1eJvaoMhs",
-        "filename": "model4.keras",
+        "file_id": "1U3GH5b4F9PrNAINg5ChIjFcN8zLGg56Z",
+        "filename": "model4.h5",
     },
     "Model 5": {
-        "file_id": "1fY7Gbwqu3W40bwfVnQ-PN0dpRgUr-8sb",
-        "filename": "model5.keras",
+        "file_id": "1Q343NNIf2ZemgwhegGPfIT3eC0r-jODf",
+        "filename": "model5.h5",
     }
 }
 
